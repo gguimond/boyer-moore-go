@@ -23,6 +23,46 @@ func buildBadCharTable(pattern string) map[byte]int {
 	return badCharTable
 }
 
+// buildGoodSuffixTable builds tables for the good suffix rule
+func buildGoodSuffixTable(pattern string) ([]int, []int) {
+	m := len(pattern)
+	
+	// Border positions
+	border := make([]int, m+1)
+	// Position of the widest border
+	shift := make([]int, m+1)
+	
+	// Preprocessing for case 2
+	i := m
+	j := m + 1
+	border[i] = j
+	
+	for i > 0 {
+		for j <= m && pattern[i-1] != pattern[j-1] {
+			if shift[j] == 0 {
+				shift[j] = j - i
+			}
+			j = border[j]
+		}
+		i--
+		j--
+		border[i] = j
+	}
+	
+	// Preprocessing for case 1
+	j = border[0]
+	for i := 0; i <= m; i++ {
+		if shift[i] == 0 {
+			shift[i] = j
+		}
+		if i == j {
+			j = border[j]
+		}
+	}
+	
+	return border, shift
+}
+
 // BoyerMooreSearch finds all occurrences of pattern in text
 // Returns a slice of starting indices where pattern is found
 func BoyerMooreSearch(text, pattern string) []int {
@@ -32,6 +72,7 @@ func BoyerMooreSearch(text, pattern string) []int {
 	
 	// Build the bad character table
 	badCharTable := buildBadCharTable(pattern)
+	_, goodSuffixShift := buildGoodSuffixTable(pattern)
 	
 	// Store the found occurrences
 	occurrences := []int{}
@@ -49,24 +90,27 @@ func BoyerMooreSearch(text, pattern string) []int {
 		// If we completed all comparisons, we found a match
 		if j < 0 {
 			occurrences = append(occurrences, i)
-			i++
+			i += goodSuffixShift[0] // Shift by good suffix rule
 		} else {
 			// Calculate shift using the bad character rule
 			charInText := text[i+j]
 			lastOccurrence := badCharTable[charInText]
-			
-			// Calculate how much to shift
-			// We want to align the bad character in text with its
-			// rightmost occurrence in pattern
-			if lastOccurrence < j {
-				// If character exists in pattern, align it
-				// If it doesn't exist (lastOccurrence == -1), shift by j+1
-				i += j - lastOccurrence
-			} else {
-				// If the character exists in pattern but only at or to the right of the mismatch,
-				// shift by 1
-				i++
+			bcShift := j - lastOccurrence
+
+			if bcShift < 1 {
+				bcShift = 1
 			}
+			
+			// Good suffix rule
+			gsShift := goodSuffixShift[j+1]
+			
+			// Take the maximum of both shifts
+			shift := bcShift
+			if gsShift > bcShift {
+				shift = gsShift
+			}
+			
+			i += shift
 		}
 	}
 	
